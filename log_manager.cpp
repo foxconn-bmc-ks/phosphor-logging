@@ -25,6 +25,23 @@ namespace logging
 {
 namespace internal
 {
+
+void action_led_state(sdbusplus::bus::bus& bus,
+            const std::string &bus_name,
+            const std::string &path,
+            const std::string state_value)
+{
+    auto method =  bus.new_method_call(bus_name.c_str(),
+                                       path.c_str(),
+                                       "org.freedesktop.DBus.Properties",
+                                       "Set");
+    method.append("xyz.openbmc_project.Led.Physical");
+    method.append("State");
+    method.append(sdbusplus::message::variant<std::string>(state_value));
+    bus.call_noreply(method);
+    return;
+}
+
 void Manager::commit(uint64_t transactionId, std::string errMsg)
 {
     auto reqLevel = level::ERR; // Default to ERR
@@ -178,6 +195,17 @@ void Manager::commit(uint64_t transactionId, std::string errMsg)
 
     AssociationList objects {};
     processMetadata(errMsg, additionalData, objects);
+
+
+    switch (static_cast<Entry::Level>(reqLevel)) {
+        case Entry::Level::Critical:
+            action_led_state(bus, "xyz.openbmc_project.LED.Controller.Platform", "xyz/openbmc_project/led/physical/Platform", "xyz.openbmc_project.Led.Physical.Action.On");
+        case Entry::Level::Warning:
+            action_led_state(bus, "xyz.openbmc_project.LED.Controller.Attention", "/xyz/openbmc_project/led/physical/Attention", "xyz.openbmc_project.Led.Physical.Action.On");
+            break;
+        default:
+            break;
+    };
 
     auto e = std::make_unique<Entry>(
                  busLog,

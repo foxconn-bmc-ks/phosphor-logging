@@ -32,6 +32,12 @@ using ManagerIface =
 namespace internal
 {
 
+void action_led_state(sdbusplus::bus::bus& bus,
+            const std::string &bus_name,
+            const std::string &path,
+            const std::string state_value);
+
+
 /** @class Manager
  *  @brief OpenBMC logging manager implementation.
  *  @details A concrete implementation for the
