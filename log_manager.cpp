@@ -211,7 +211,7 @@ void Manager::_commit(uint64_t transactionId, std::string&& errMsg,
     processMetadata(errMsg, additionalData, objects);
 
 
-    switch (static_cast<Entry::Level>(reqLevel)) {
+    switch (static_cast<Entry::Level>(errLvl)) {
         case Entry::Level::Critical:
             action_led_state(bus, "xyz.openbmc_project.LED.Controller.Platform", "xyz/openbmc_project/led/physical/Platform", "xyz.openbmc_project.Led.Physical.Action.On");
         case Entry::Level::Warning:
