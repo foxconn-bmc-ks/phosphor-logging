@@ -28,7 +28,7 @@ AS_IF([test "x$enable_install_scripts" != "xyes"], [
     AM_PATH_PYTHON([2.7], [AC_SUBST([PYTHON], [echo "$PYTHON"])], [AC_MSG_ERROR(
         [Could not find python-2.7 installed...python-2.7 is required])])
 
-    # Surpress the --with-libtool-sysroot error
+    # Suppress the --with-libtool-sysroot error
     LT_INIT
 
     # Checks for libraries.
@@ -99,7 +99,7 @@ AC_ARG_ENABLE([metadata-processing],
 )
 
 AC_ARG_VAR(ERROR_CAP, [Max number of error entries allowed for commit])
-AS_IF([test "x$ERROR_CAP" == "x"], [ERROR_CAP=100])
+AS_IF([test "x$ERROR_CAP" == "x"], [ERROR_CAP=200])
 AC_DEFINE_UNQUOTED([ERROR_CAP], [$ERROR_CAP], [Max number of error entries allowed for commit])
 
 AC_ARG_VAR(ERROR_INFO_CAP, [Cap on informational (and below) severity errors])

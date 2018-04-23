@@ -42,30 +42,40 @@ void action_led_state(sdbusplus::bus::bus& bus,
     return;
 }
 
-void Manager::commit(uint64_t transactionId, std::string errMsg)
+inline auto getLevel(const std::string& errMsg)
 {
-    auto reqLevel = level::ERR; // Default to ERR
-    size_t realErrCnt = entries.size() - infoErrors.size();
-    auto levelmap = g_errLevelMap.find(errMsg);
+    auto reqLevel = Entry::Level::Error; // Default to Error
 
+    auto levelmap = g_errLevelMap.find(errMsg);
     if (levelmap != g_errLevelMap.end())
     {
-        reqLevel = levelmap->second;
+        reqLevel = static_cast<Entry::Level>(levelmap->second);
     }
 
-    if (static_cast<Entry::Level>(reqLevel) < Entry::sevLowerLimit)
+    return reqLevel;
+}
+
+void Manager::commit(uint64_t transactionId, std::string errMsg)
+{
+    auto level = getLevel(errMsg);
+    _commit(transactionId, std::move(errMsg), level);
+}
+
+void Manager::commitWithLvl(uint64_t transactionId, std::string errMsg,
+                            uint32_t errLvl)
+{
+    _commit(transactionId, std::move(errMsg),
+            static_cast<Entry::Level>(errLvl));
+}
+
+void Manager::_commit(uint64_t transactionId, std::string&& errMsg,
+                      Entry::Level errLvl)
+{
+    if (errLvl < Entry::sevLowerLimit)
     {
-        if (capped)
+        if (realErrors.size() >= ERROR_CAP)
         {
-            return;
-        }
-        if (realErrCnt >= ERROR_CAP)
-        {
-            log<level::ERR>("Reached error cap, Ignoring error",
-                            entry("SIZE=%d", realErrCnt),
-                            entry("ERROR_CAP=%d", ERROR_CAP));
-            capped = true;
-            return;
+            erase(realErrors.front());
         }
     }
     else
@@ -184,9 +194,13 @@ void Manager::commit(uint64_t transactionId, std::string errMsg)
 
     // Create error Entry dbus object
     entryId++;
-    if (static_cast<Entry::Level>(reqLevel) >= Entry::sevLowerLimit)
+    if (errLvl >= Entry::sevLowerLimit)
     {
         infoErrors.push_back(entryId);
+    }
+    else
+    {
+        realErrors.push_back(entryId);
     }
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count();
@@ -212,7 +226,7 @@ void Manager::commit(uint64_t transactionId, std::string errMsg)
                  objPath,
                  entryId,
                  ms, // Milliseconds since 1970
-                 static_cast<Entry::Level>(reqLevel),
+                 errLvl,
                  std::move(errMsg),
                  std::move(additionalData),
                  std::move(objects),
@@ -245,34 +259,44 @@ void Manager::processMetadata(const std::string& errorName,
 void Manager::erase(uint32_t entryId)
 {
     auto entry = entries.find(entryId);
-    auto id = entry->second->id();
     if(entries.end() != entry)
     {
         // Delete the persistent representation of this error.
         fs::path errorPath(ERRLOG_PERSIST_PATH);
-        errorPath /= std::to_string(id);
+        errorPath /= std::to_string(entryId);
         fs::remove(errorPath);
+
+        auto removeId = [](std::list<uint32_t>& ids , uint32_t id)
+        {
+            auto it = std::find(ids.begin(), ids.end(), id);
+            if (it != ids.end())
+            {
+                ids.erase(it);
+            }
+        };
         if (entry->second->severity() >= Entry::sevLowerLimit)
         {
-            auto it = std::find(infoErrors.begin(), infoErrors.end(), entryId);
-            if (it != infoErrors.end())
-            {
-                infoErrors.erase(it);
-            }
+            removeId(infoErrors, entryId);
+        }
+        else
+        {
+            removeId(realErrors, entryId);
         }
         entries.erase(entry);
     }
-
-    size_t realErrCnt = entries.size() - infoErrors.size();
-
-    if (realErrCnt <  ERROR_CAP)
+    else
     {
-        capped = false;
+        logging::log<level::ERR>("Invalid entry ID to delete",
+                logging::entry("ID=%d", entryId));
     }
 }
 
 void Manager::restore()
 {
+    auto sanity = [](const auto& id, const auto& restoredId)
+    {
+        return id == restoredId;
+    };
     std::vector<uint32_t> errorIds;
 
     fs::path dir(ERRLOG_PERSIST_PATH);
@@ -292,13 +316,30 @@ void Manager::restore()
                      *this);
         if (deserialize(file.path(), *e))
         {
-            e->emit_object_added();
-            if (e->severity() >= Entry::sevLowerLimit)
+            //validate the restored error entry id
+            if (sanity(static_cast<uint32_t>(idNum), e->id()))
             {
-                infoErrors.push_back(idNum);
+                e->emit_object_added();
+                if (e->severity() >= Entry::sevLowerLimit)
+                {
+                    infoErrors.push_back(idNum);
+                }
+                else
+                {
+                    realErrors.push_back(idNum);
+                }
+
+                entries.insert(std::make_pair(idNum, std::move(e)));
+                errorIds.push_back(idNum);
             }
-            entries.insert(std::make_pair(idNum, std::move(e)));
-            errorIds.push_back(idNum);
+            else
+            {
+                logging::log<logging::level::ERR>(
+                    "Failed in sanity check while restoring error entry. "
+                    "Ignoring error entry",
+                    logging::entry("ID_NUM=%d", idNum),
+                    logging::entry("ENTRY_ID=%d", e->id()));
+            }
         }
     }
 
