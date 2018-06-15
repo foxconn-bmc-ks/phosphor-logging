@@ -1,6 +1,8 @@
 #pragma once
 
 #include <list>
+#include <vector>
+#include <algorithm>
 #include <sdbusplus/bus.hpp>
 #include <phosphor-logging/log.hpp>
 #include "elog_entry.hpp"
@@ -143,10 +145,10 @@ class Manager : public details::ServerObject<details::ManagerIface>
         std::map<uint32_t, std::unique_ptr<Entry>> entries;
 
         /** @brief List of error ids for high severity errors */
-        std::list<uint32_t> realErrors;
+        std::vector<uint32_t> realErrors;
 
         /** @brief List of error ids for Info(and below) severity */
-        std::list<uint32_t> infoErrors;
+        std::vector<uint32_t> infoErrors;
 
         /** @brief Id of last error log entry */
         uint32_t entryId;

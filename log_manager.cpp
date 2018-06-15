@@ -266,7 +266,7 @@ void Manager::erase(uint32_t entryId)
         errorPath /= std::to_string(entryId);
         fs::remove(errorPath);
 
-        auto removeId = [](std::list<uint32_t>& ids , uint32_t id)
+        auto removeId = [](std::vector<uint32_t>& ids , uint32_t id)
         {
             auto it = std::find(ids.begin(), ids.end(), id);
             if (it != ids.end())
@@ -346,6 +346,8 @@ void Manager::restore()
     if (!errorIds.empty())
     {
         entryId = *(std::max_element(errorIds.begin(), errorIds.end()));
+		std::sort(infoErrors.begin(), infoErrors.end());
+		std::sort(realErrors.begin(), realErrors.end());
     }
 }
 
